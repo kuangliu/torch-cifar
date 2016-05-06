@@ -1,10 +1,16 @@
-require 'xlua';
-require 'optim';
-require 'nn';
+require 'xlua'
+require 'image'
+require 'optim'
+require 'nn'
+require 'cunn'
+require 'cudnn'
+require 'cutorch'
 require './model.lua'
 require './provider.lua'
 
 c = require 'trepl.colorize'
+
+cutorch.setDevice(3)
 
 do
     BatchFlip,parent = torch.class('nn.BatchFlip', 'nn.Module')
@@ -30,15 +36,26 @@ do
     end
 end
 
+
+local function cast(t)
+    return t:cuda()
+end
+
+
 print(c.blue '==>' .. ' configuring model')
 
 net = nn.Sequential()
 net:add(nn.BatchFlip():float())
+net:add(cast(nn.Copy('torch.FloatTensor', torch.type(cast(torch.Tensor())))))
 
 vgg = Models:getVGG()
-net:add(vgg:float())
+net:add(cast(vgg))
+net:get(2).updateGradInput = function(input) return end
 
 print(net)
+
+-- use cuDNN
+cudnn.convert(net:get(3), cudnn)
 
 print(c.blue '==>' .. 'loading data')
 provider = Provider()
@@ -54,7 +71,7 @@ parameters, gradParameters = net:getParameters()
 
 print(c.blue '==>' .. 'set criterion')
 
-criterion = nn.CrossEntropyCriterion():float()
+criterion = cast(nn.CrossEntropyCriterion())
 
 print(c.blue '==>' .. 'configure optimizer')
 
@@ -79,7 +96,7 @@ function train()
 
     print('online epoch #' .. epoch .. ' batch size = ' .. opt.batchSize)
 
-    targets = torch.FloatTensor(opt.batchSize)
+    targets = cast(torch.FloatTensor(opt.batchSize))
 
     indices = torch.randperm(provider.trainData:size(1)):long():split(opt.batchSize)
     indices[#indices] = nil

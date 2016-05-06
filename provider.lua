@@ -5,9 +5,9 @@ require 'xlua';
 local Provider = torch.class 'Provider'
 
 function Provider:__init()
-    local cifarPath = '/mnt/hgfs/D/download/cifar10/'
-    local trsize = 5000
-    local tesize = 1000
+    local cifarPath = 'data/'
+    local trsize = 50000
+    local tesize = 10000
 
     self.trainData = {
         data = torch.Tensor(50000, 3072),
