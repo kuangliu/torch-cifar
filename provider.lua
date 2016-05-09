@@ -42,4 +42,59 @@ function Provider:__init()
     -- reshape data
     trainData.data = trainData.data:reshape(trsize,3,32,32)
     testData.data = testData.data:reshape(tesize,3,32,32)
+
+    self:normalize()
+end
+
+
+function Provider:normalize()
+    local trainData = self.trainData
+    local testData = self.testData
+
+    print 'preprocessing data (color space + normalization)'
+
+    local normalization = nn.SpatialContrastiveNormalization(1, image.gaussian1D(7))
+
+    for i = 1,trainData:size() do
+        xlua.progress(i, trainData:size())
+        -- rgb -> yuv
+        local rgb = trainData.data[i]
+        local yuv = image.rgb2yuv(rgb)
+         -- normalize y locally:
+        yuv[1] = normalization(yuv[{{1}}])
+        trainData.data[i] = yuv
+    end
+
+    -- normalize u globally:
+    local mean_u = trainData.data:select(2,2):mean()
+    local std_u = trainData.data:select(2,2):std()
+    trainData.data:select(2,2):add(-mean_u)
+    trainData.data:select(2,2):div(std_u)
+    -- normalize v globally:
+    local mean_v = trainData.data:select(2,3):mean()
+    local std_v = trainData.data:select(2,3):std()
+    trainData.data:select(2,3):add(-mean_v)
+    trainData.data:select(2,3):div(std_v)
+
+    trainData.mean_u = mean_u
+    trainData.std_u = std_u
+    trainData.mean_v = mean_v
+    trainData.std_v = std_v
+
+    -- preprocess testSet
+    for i = 1,testData:size() do
+        xlua.progress(i, testData:size())
+        -- rgb -> yuv
+        local rgb = testData.data[i]
+        local yuv = image.rgb2yuv(rgb)
+        -- normalize y locally:
+        yuv[{1}] = normalization(yuv[{{1}}])
+        testData.data[i] = yuv
+    end
+    -- normalize u globally:
+    testData.data:select(2,2):add(-mean_u)
+    testData.data:select(2,2):div(std_u)
+    -- normalize v globally:
+    testData.data:select(2,3):add(-mean_v)
+    testData.data:select(2,3):div(std_v)
 end
