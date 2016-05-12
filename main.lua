@@ -1,7 +1,8 @@
-require 'xlua';
-require 'optim';
-require 'nn';
+require 'xlua'
+require 'optim'
+require 'nn'
 require './model.lua'
+require './resnet.lua'
 require './provider.lua'
 
 c = require 'trepl.colorize'
@@ -35,8 +36,11 @@ print(c.blue '==>' .. ' configuring model')
 net = nn.Sequential()
 net:add(nn.BatchFlip():float())
 
-vgg = Models:getVGG()
-net:add(vgg:float())
+--vgg = Models:getVGG()
+--net:add(vgg:float())
+resnet = cifarResNet()
+net:add(resnet:float())
+
 
 print(net)
 
@@ -66,7 +70,7 @@ optimState = {
     }
 
 opt = {
-    batchSize = 128 
+    batchSize = 128
     }
 
 function train()

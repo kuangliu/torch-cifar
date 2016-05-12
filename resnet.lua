@@ -1,3 +1,4 @@
+
 require 'nn';
 
 ReLU = nn.ReLU
@@ -6,17 +7,21 @@ MaxPool = nn.SpatialMaxPooling
 AvgPool = nn.SpatialAveragePooling
 BN = nn.SpatialBatchNormalization
 
--- function shortCut(nInputPlane, nOutputPlane)
---     -----------------------------------------------------------------------
---     -- The shortcut layer is either:
---     --      - Identity: within the same nBlob
---     --      - 1x1 CONV: between different nBlobs
---     -----------------------------------------------------------------------
---
---
---
---
--- end
+function shortCut(nInputPlane, nOutputPlane, stride)
+    -----------------------------------------------------------------------
+    -- The shortcut layer is either:
+    --      - Identity: within the same nBlob
+    --      - 1x1 CONV: surrounding the first blob or between different nBlobs
+    -----------------------------------------------------------------------
+    if stride == 2 then
+        -- the first blob, the short cut is CONV
+        return nn.Sequential()
+            :add(Conv(nInputPlane, nOutputPlane, 1, 1, stride, stride))
+            :add(BN(nOutputPlane))
+    else
+        return nn.Identity()
+    end
+end
 
 
 function blob(nInputPlane, nOutputPlane, stride)
@@ -38,7 +43,7 @@ function blob(nInputPlane, nOutputPlane, stride)
     return nn.Sequential()
         :add(nn.ConcatTable()
             :add(s)
-            :add(nn.Identity()))
+            :add(shortCut(nInputPlane, nOutputPlane, stride)))
         :add(nn.CAddTable(true))
         :add(ReLU(true))
 end
@@ -56,20 +61,17 @@ function nBlob(nInputPlane, nOutputPlane)
 
     -- The first blob of nBlob: double the # of CONV kernels; decrease the size
     -- by using `stride=2`
-    s:add(blob(nInputPlane, nOutputPlane), 2)
+    s:add(blob(nInputPlane, nOutputPlane, 2))
 
     -- The rest blobs of nBlob: # of CONV kernels unchanged, and use `stride=1`
     local n = 3
     for i = 2,n do
         -- For the first blob of nBlob, use stride=2 to decrease the size
-        s:add(blob(nOutputPlane, nOutputPlane), 1)
+        s:add(blob(nOutputPlane, nOutputPlane, 1))
     end
 
     return s
 end
-
-
-
 
 function cifarResNet()
     --------------------------------------------------
@@ -84,7 +86,7 @@ function cifarResNet()
     net:add(nBlob(16,32))
     net:add(nBlob(32,64))
 
-    net:add(AvgPool(8,8,1,1))
+    net:add(AvgPool(4,4,1,1))
     net:add(nn.View(64):setNumInputDims(3))
     net:add(nn.Linear(64,10))
 
@@ -96,6 +98,3 @@ function cifarResNet()
 
     return net
 end
-
-
---net = cifarResNet()
