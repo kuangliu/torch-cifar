@@ -38,18 +38,16 @@ function Models:getVGG()
     vgg:add(MaxPooling(2,2,2,2):ceil())
     vgg:add(nn.View(512))
 
-    classifier = nn.Sequential()
-    classifier:add(nn.Dropout(0.5))
-    classifier:add(nn.Linear(512,512))
-    classifier:add(nn.BatchNormalization(512))
-    classifier:add(nn.ReLU(true))
-    classifier:add(nn.Dropout(0.5))
-    classifier:add(nn.Linear(512,10))
-    vgg:add(classifier)
+    vgg:add(nn.Dropout(0.5))
+    vgg:add(nn.Linear(512,512))
+    vgg:add(nn.BatchNormalization(512))
+    vgg:add(nn.ReLU(true))
+    vgg:add(nn.Dropout(0.5))
+    vgg:add(nn.Linear(512,10))
 
     -- Xavier/2 initialization
     for _, layer in pairs(vgg:findModules('nn.SpatialConvolution')) do
-        layer.weight:normal(0,1):div(layer.kH*layer.kW*layer.nInputPlane/2);
+        layer.weight:normal(0, math.sqrt(2/layer.kH*layer.kW*layer.nInputPlane))
         layer.bias:zero()
     end
 

@@ -1,7 +1,5 @@
-c = require 'trepl.colorize'
+require './provider.lua'
 
+a = Provider()
 
-
-print(c.blue '==>' .. ' configuring model')
-
-CNNModel
+a:normalize()

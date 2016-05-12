@@ -66,7 +66,7 @@ optimState = {
     }
 
 opt = {
-    batchSize = 128
+    batchSize = 128 
     }
 
 function train()
