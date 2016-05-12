@@ -6,6 +6,7 @@ require 'cunn'
 require 'cudnn'
 require 'cutorch'
 require './model.lua'
+require './resnet.lua'
 require './provider.lua'
 
 c = require 'trepl.colorize'
@@ -48,8 +49,10 @@ net = nn.Sequential()
 net:add(nn.BatchFlip():float())
 net:add(cast(nn.Copy('torch.FloatTensor', torch.type(cast(torch.Tensor())))))
 
-vgg = Models:getVGG()
-net:add(cast(vgg))
+--vgg = Models:getVGG()
+--net:add(cast(vgg))
+resnet = cifarResNet()
+net:add(cast(resnet))
 net:get(2).updateGradInput = function(input) return end
 
 print(net)
@@ -76,25 +79,25 @@ criterion = cast(nn.CrossEntropyCriterion())
 print(c.blue '==>' .. 'configure optimizer')
 
 optimState = {
-    learningRate = 1e-3,
+    learningRate = 0.1,
     learningRateDecay = 1e-7,
     weightDecay = 0.0005,
     momentum = 0.9,
     }
 
 opt = {
-    batchSize = 128
+    batchSize = 256
     }
 
 function train()
     net:training()
     epoch = epoch or 1
 
-    if epoch % 25 == 0 then -- every 25 epochs, decrease lr
+    if epoch % 50 == 0 then -- every 25 epochs, decrease lr
         optimState.learningRate = optimState.learningRate/2
     end
 
-    print('online epoch #' .. epoch .. ' batch size = ' .. opt.batchSize)
+    print(c.blue '==>' .. 'training epoch #' .. epoch .. ' lr = ' .. optimState.learningRate)
 
     targets = cast(torch.FloatTensor(opt.batchSize))
 
@@ -128,7 +131,7 @@ function train()
     end
 
     confusion:updateValids()
-    print(('Train accuracy: '..c.cyan'%.2f'..' %%\t time: %.2f s'):format(
+    print((c.green '======>' .. 'Train accuracy: '..c.cyan'%.2f'..' %%\t time: %.2f s'):format(
       confusion.totalValid * 100, torch.toc(tic)))
 
     train_acc = confusion.totalValid * 100
@@ -150,7 +153,8 @@ function test()
     end
 
     confusion:updateValids()
-    print('test accuracy: ', confusion.totalValid * 100)
+    print((c.green) '======>' .. 'test accuracy: ', confusion.totalValid * 100)
+    print()
 
     if testLogger then
         testLogger:add{train_acc, confusion.totalValid*100}
