@@ -1,12 +1,10 @@
 require 'nn'
 
-
 ReLU = nn.ReLU
 Conv = nn.SpatialConvolution
 MaxPool = nn.SpatialMaxPooling
 AvgPool = nn.SpatialAveragePooling
 BN = nn.SpatialBatchNormalization
-
 
 function shortCut(nInputPlane, nOutputPlane, stride)
     -----------------------------------------------------------------------
@@ -50,22 +48,23 @@ function blob(nInputPlane, nOutputPlane, stride)
 end
 
 
-function nBlob(nInputPlane, nOutputPlane)
+function nBlob(nInputPlane, nOutputPlane, n, stride)
     -------------------------------------------------------------------------
-    -- Stack n blobs together, each of these blobs are of the same filter num.
-    -- In this particular case, we use `n=3`.
+    -- Stack n blobs together, each of these blobs share the same filter num.
     -- Inputs:
     --      - nInputPlane: # of input channels
     --      - nOutputPlane: # of CONV kernels
+    --      - n: # of blobs
+    --      - stride: CONV stride of first blob, could be 1 or 2
+    --          - stride=1: maintain input H&W
+    --          - stride=2: decrease input H&W by half
     -------------------------------------------------------------------------
     local s = nn.Sequential()
 
-    -- The first blob of nBlob: double the # of CONV kernels; decrease the size
-    -- by using `stride=2`
-    s:add(blob(nInputPlane, nOutputPlane, 2))
+    -- The first blob of nBlob
+    s:add(blob(nInputPlane, nOutputPlane, stride))
 
     -- The rest blobs of nBlob: # of CONV kernels unchanged, and use `stride=1`
-    local n = 3
     for i = 2,n do
         -- For the first blob of nBlob, use stride=2 to decrease the size
         s:add(blob(nOutputPlane, nOutputPlane, 1))
@@ -84,11 +83,12 @@ function cifarResNet()
     net:add(BN(16))
     net:add(ReLU(true))
 
-    net:add(nBlob(16,16))
-    net:add(nBlob(16,32))
-    net:add(nBlob(32,64))
+    net:add(nBlob(16,16,3,2))
+    net:add(nBlob(16,32,3,2))
+    net:add(nBlob(32,64,3,2))
+    net:add(nBlob(64,64,3,2))
 
-    net:add(AvgPool(4,4,1,1))
+    net:add(AvgPool(2,2,1,1))
     net:add(nn.View(64):setNumInputDims(3))
     net:add(nn.Linear(64,10))
 
