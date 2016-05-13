@@ -1,5 +1,6 @@
-require './provider.lua'
+require 'xlua'
 
-a = Provider()
-
-a:normalize()
+for i = 1,1000 do
+    io.write(i)
+    xlua.progress(i,1000)
+end

@@ -70,7 +70,7 @@ optimState = {
     }
 
 opt = {
-    batchSize = 128
+    batchSize = 32
     }
 
 function train()
@@ -141,7 +141,6 @@ function test()
 
     if testLogger then
         testLogger:add{train_acc, confusion.totalValid*100}
-        testLogger:style{'-','-'}
     end
 
     confusion:zero()
