@@ -1,5 +1,4 @@
-
-require 'nn';
+require 'nn'
 
 ReLU = nn.ReLU
 Conv = nn.SpatialConvolution
