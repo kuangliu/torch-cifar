@@ -1,10 +1,12 @@
 require 'nn'
 
+
 ReLU = nn.ReLU
 Conv = nn.SpatialConvolution
 MaxPool = nn.SpatialMaxPooling
 AvgPool = nn.SpatialAveragePooling
 BN = nn.SpatialBatchNormalization
+
 
 function shortCut(nInputPlane, nOutputPlane, stride)
     -----------------------------------------------------------------------
@@ -71,6 +73,7 @@ function nBlob(nInputPlane, nOutputPlane)
 
     return s
 end
+
 
 function cifarResNet()
     --------------------------------------------------

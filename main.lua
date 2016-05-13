@@ -86,15 +86,16 @@ optimState = {
     }
 
 opt = {
-    batchSize = 128
+    batchSize = 256
     }
+
 
 function train()
     net:training()
     epoch = epoch or 1
 
-    if epoch % 100 == 0 then -- after some epochs, decrease lr
-        optimState.learningRate = optimState.learningRate/2
+    if epoch % 80 == 0 then -- after some epochs, decrease lr
+        optimState.learningRate = optimState.learningRate/10
     end
 
     print((c.Red '==> '..'epoch: %d (lr = %.3f)'):format(epoch, optimState.learningRate))
@@ -166,6 +167,7 @@ function test()
 
     confusion:zero()
 end
+
 
 -- do for 500 epochs
 for i = 1,500 do
