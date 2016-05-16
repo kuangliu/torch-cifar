@@ -1,6 +1,5 @@
-require 'xlua'
+args = lapp[[
+-g,--gpu       (default 3)     gpu id
+]]
 
-for i = 1,1000 do
-    io.write(i)
-    xlua.progress(i,1000)
-end
+print(args.g)
