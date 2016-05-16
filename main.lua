@@ -39,6 +39,7 @@ net:add(nn.BatchFlip():float())
 --vgg = Models:getVGG()
 --net:add(vgg:float())
 resnet = cifarResNet()
+--resnet = createModel()
 net:add(resnet:float())
 
 

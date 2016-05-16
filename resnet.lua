@@ -23,7 +23,7 @@ function shortCut(nInputPlane, nOutputPlane, stride)
             :add(BN(nOutputPlane))
     elseif shortCutType == 'ZERO_PAD'then
         return nn.Sequential()
-            :add(nn.SpatialAveragePooling(1, 1, stride, stride))
+            :add(AvgPool(1, 1, stride, stride))
             :add(nn.Concat(2)
                 :add(nn.Identity())
                 :add(nn.MulConstant(0)))
@@ -93,7 +93,7 @@ function cifarResNet()
     net:add(BN(16))
     net:add(ReLU(true))
 
-    net:add(nBlob(16,16,3,1))
+    net:add(nBlob(16,16,3))
     net:add(nBlob(16,32,3,2))
     net:add(nBlob(32,64,3,2))
     --net:add(nBlob(64,64,3,2))
@@ -102,9 +102,9 @@ function cifarResNet()
     net:add(nn.View(64):setNumInputDims(3))
     net:add(nn.Linear(64,10))
 
-    -- Xavier/2 initialization
+    --Xavier/2 initialization
     for _, layer in pairs(net:findModules('nn.SpatialConvolution')) do
-        layer.weight:normal(0, math.sqrt(2/layer.kH*layer.kW*layer.nInputPlane))
+        layer.weight:normal(0, math.sqrt(2/(layer.kH*layer.kW*layer.nOutputPlane)))
         layer.bias:zero()
     end
 
