@@ -43,7 +43,7 @@ function Provider:__init()
     trainData.data = trainData.data:reshape(trsize,3,32,32)
     testData.data = testData.data:reshape(tesize,3,32,32)
 
-    self:normalize()
+    --self:normalize()
 end
 
 

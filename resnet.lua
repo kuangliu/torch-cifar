@@ -6,19 +6,29 @@ MaxPool = nn.SpatialMaxPooling
 AvgPool = nn.SpatialAveragePooling
 BN = nn.SpatialBatchNormalization
 
+local shortCutType = 'ZERO_PAD' or 'CONV'
+
 function shortCut(nInputPlane, nOutputPlane, stride)
     -----------------------------------------------------------------------
     -- The shortcut layer is either:
-    --      - Identity: within the same nBlob
-    --      - 1x1 CONV: surrounding the first blob or between different nBlobs
+    --      - Identity: when input shape == output shape
+    --      - Zero padding: when input shape ~= output shape
+    --      - 1x1 CONV: when input shape ~= output shape
     -----------------------------------------------------------------------
-    if stride == 2 then
-        -- the first blob, the short cut is CONV
+    if nInputPlane == nOutputPlane then
+        return nn.Identity
+    elseif shortCutType == 'CONV' then
         return nn.Sequential()
             :add(Conv(nInputPlane, nOutputPlane, 1, 1, stride, stride))
             :add(BN(nOutputPlane))
+    elseif shortCutType == 'ZERO_PAD'then
+        return nn.Sequential()
+            :add(AvgPool(1, 1, stride, stride))
+            :add(nn.Concat(2)
+                :add(nn.Identity())
+                :add(nn.MulConstant(0)))
     else
-        return nn.Identity()
+        assert(1==2, 'Unknown shortCutType!')     -- never reached here.
     end
 end
 
@@ -83,20 +93,20 @@ function cifarResNet()
     net:add(BN(16))
     net:add(ReLU(true))
 
-    net:add(nBlob(16,16,3,2))
+    net:add(nBlob(16,16,3))
     net:add(nBlob(16,32,3,2))
     net:add(nBlob(32,64,3,2))
-    net:add(nBlob(64,64,3,2))
+    --net:add(nBlob(64,64,3,2))
 
-    net:add(AvgPool(2,2,1,1))
+    net:add(AvgPool(8,8,1,1))
     net:add(nn.View(64):setNumInputDims(3))
     net:add(nn.Linear(64,10))
 
     -- Xavier/2 initialization
-    for _, layer in pairs(net:findModules('nn.SpatialConvolution')) do
-        layer.weight:normal(0, math.sqrt(2/layer.kH*layer.kW*layer.nInputPlane))
-        layer.bias:zero()
-    end
+     for _, layer in pairs(net:findModules('nn.SpatialConvolution')) do
+         layer.weight:normal(0, math.sqrt(2/(layer.kH*layer.kW*layer.nOutputPlane)))
+         layer.bias:zero()
+     end
 
     return net
 end

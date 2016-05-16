@@ -8,10 +8,15 @@ require 'cutorch'
 require './model.lua'
 require './resnet.lua'
 require './provider.lua'
+require './fb.lua'
 
 c = require 'trepl.colorize'
 
-cutorch.setDevice(3)
+args = lapp[[
+    -g,--gpu    (default 3)    GPU_ID
+]]
+
+cutorch.setDevice(args.gpu)
 
 do
     BatchFlip,parent = torch.class('nn.BatchFlip', 'nn.Module')
@@ -52,6 +57,7 @@ net:add(cast(nn.Copy('torch.FloatTensor', torch.type(cast(torch.Tensor())))))
 --vgg = Models:getVGG()
 --net:add(cast(vgg))
 resnet = cifarResNet()
+--resnet = createModel()
 net:add(cast(resnet))
 net:get(2).updateGradInput = function(input) return end
 
