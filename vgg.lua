@@ -1,8 +1,6 @@
-require 'nn';
+require 'nn'
 
-local Models = torch.class 'Models'
-
-function Models:getVGG()
+function getVGG()
     local vgg = nn.Sequential()
 
     local function ConvBNReLU(nInputPlane, nOutputPlane)
@@ -47,7 +45,8 @@ function Models:getVGG()
 
     -- Xavier/2 initialization
     for _, layer in pairs(vgg:findModules('nn.SpatialConvolution')) do
-        layer.weight:normal(0, math.sqrt(2/(layer.kH*layer.kW*layer.nInputPlane)))
+        local n = layer.kH*layer.kW*layer.nInputPlane
+        layer.weight:normal(0, math.sqrt(2/n)
         layer.bias:zero()
     end
 

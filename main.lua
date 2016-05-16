@@ -1,7 +1,7 @@
 require 'xlua'
 require 'optim'
 require 'nn'
-require './model.lua'
+require './vgg.lua'
 require './resnet.lua'
 require './provider.lua'
 
@@ -36,7 +36,7 @@ print(c.blue '==>' .. ' configuring model')
 net = nn.Sequential()
 net:add(nn.BatchFlip():float())
 
---vgg = Models:getVGG()
+--vgg = getVGG()
 --net:add(vgg:float())
 resnet = cifarResNet()
 --resnet = createModel()

@@ -93,7 +93,7 @@ function cifarResNet()
     net:add(BN(16))
     net:add(ReLU(true))
 
-    net:add(nBlob(16,16,3))
+    net:add(nBlob(16,16,3,1))
     net:add(nBlob(16,32,3,2))
     net:add(nBlob(32,64,3,2))
     --net:add(nBlob(64,64,3,2))
@@ -104,7 +104,8 @@ function cifarResNet()
 
     --Xavier/2 initialization
     for _, layer in pairs(net:findModules('nn.SpatialConvolution')) do
-        layer.weight:normal(0, math.sqrt(2/(layer.kH*layer.kW*layer.nOutputPlane)))
+        local n = layer.kH*layer.kW*layer.nOutputPlane
+        layer.weight:normal(0, math.sqrt(2/n))
         layer.bias:zero()
     end
 
