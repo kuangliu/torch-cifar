@@ -16,7 +16,7 @@ c = require 'trepl.colorize'
 opt = lapp[[
     -g,--gpu               (default 3)                   GPU ID
     -c,--checkpointPath    (default './checkpoints/')    checkpoint saving path
-    -b,--batchSize         (default 256)                  batch size
+    -b,--batchSize         (default 256)                 batch size
     -r,--resume                                          resume from checkpoint
 ]]
 
@@ -67,6 +67,7 @@ function setupResNet()
     return net, criterion
 end
 
+
 function setupModel(opt)
     -- Either load from checkpoint or build a new model.
     if opt.resume == true then
@@ -90,7 +91,7 @@ function cast(t)
 end
 
 
-print(c.blue '==> '..' loading data..')
+print(c.blue '==> '..'loading data..')
 --provider = Provider()
 provider = torch.load('provider.t7')
 provider.trainData.data = provider.trainData.data:float()
@@ -107,11 +108,9 @@ net, criterion = setupModel(opt)
 parameters, gradParameters = net:getParameters()
 criterion = criterion or cast(nn.CrossEntropyCriterion())
 
-parameters, gradParameters = net:getParameters()
-
-print(c.blue '==> ' .. 'configure optimizer')
+print(c.blue '==> ' .. 'configure optimizer\n')
 optimState = optimState or {
-    learningRate = 1e-3,
+    learningRate = 0.1,
     learningRateDecay = 1e-7,
     weightDecay = 0.0005,
     momentum = 0.9,
@@ -121,16 +120,16 @@ optimState = optimState or {
 
 bestTestAcc = 0
 
+
 function train()
     net:training()
-    epoch = epoch or 1
+    epoch = epoch and epoch+1 or 1
 
     if epoch % 80 == 0 then -- after some epochs, decrease lr
         optimState.learningRate = optimState.learningRate/10
     end
 
     print((c.Red '==> '..'epoch: %d (lr = %.3f)'):format(epoch, optimState.learningRate))
-
     print(c.Green '==> '..'training')
 
     targets = cast(torch.FloatTensor(opt.batchSize))
@@ -172,7 +171,6 @@ function train()
     print((c.Green '==> '..('Train acc: %.2f%%\tloss: %.5f '):format(trainAcc, lastLoss)))
 
     confusion:zero()
-    epoch = epoch + 1
 end
 
 
