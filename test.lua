@@ -1,16 +1,7 @@
-require 'nn'
+require './xLogger.lua'
 
-opt = lapp[[
-    -g,--gpu               (default 3)                   GPU ID
-    -c,--checkpointPath    (default './checkpoints/')    checkpoint saving path
-    -b,--batchSize         (default 32)                  batch size
-    -r,--resume                                          resume from checkpoint
-]]
+l = xLogger('./log/test.log')
+l:setNames{'haha','hehe'}
 
-
-
-epoch=nil
-for i = 1,10 do
-    epoch = epoch and epoch+1 or 1
-    print(epoch)
-end
+l:add({1,2})
+l:add({3,4})

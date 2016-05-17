@@ -179,7 +179,7 @@ function train()
     confusion:updateValids()
 
     trainAcc = confusion.totalValid * 100
-    print((c.Green '==> '..('Train acc: %.2f%%\tloss: %.5f '):format(trainAcc, lastLoss)))
+    print((c.Green '==> '..('Train acc: '.. c.Cyan('%.2f%%')..'\tloss: '..c.Cyan('%.5f')):format(trainAcc, lastLoss)))
 
     confusion:zero()
 end
@@ -205,7 +205,7 @@ function test()
         isBestModel = true
     end
 
-    print(c.Blue '==> '..('Test acc: %.2f%% \tBest test acc: %.2f%%'):format(testAcc, bestTestAcc))
+    print(c.Blue '==> '..('Test acc: '.. c.Cyan('%.2f%%')..'\tBest test acc: '..c.Cyan('%.2f%%')):format(testAcc, bestTestAcc))
 
     if testLogger then
         testLogger:add{trainAcc, testAcc}
