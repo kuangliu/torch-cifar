@@ -5,11 +5,11 @@
 
 local xLogger = torch.class('xLogger')
 
-
 local function table2String(tbl)
     local s = ''
     for _,v in pairs(tbl) do
-        s = s .. ('%.2f'):format(v) .. '\t'
+        if type(v) == 'number' then v = ('%.2f'):format(v) end
+        s = s..v..'\t'
     end
     return s
 end

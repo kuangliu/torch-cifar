@@ -7,6 +7,7 @@ require './resnet.lua'
 require './provider.lua'
 require './checkpoints.lua'
 require './fb.lua'
+require './xLogger.lua'
 
 c = require 'trepl.colorize'
 
@@ -112,12 +113,8 @@ confusion = optim.ConfusionMatrix(10)
 
 testLogger = xLogger(paths.concat('log', 'test.log'))
 if not opt.resume then
-    testLogger:setNames{'% mean class accuracy (train set)', '% mean class accuracy (test set)'}
+    testLogger:setNames{'Train accuracy (%)', 'Test accuracy (%)'}
 end
-
---paths.mkdir('log')
---testLogger = optim.Logger(paths.concat('log','test.log'))
---testLogger:setNames{'% mean class accuracy (train set)', '% mean class accuracy (test set)'}
 
 print(c.blue '==> ' .. 'setting up model..')
 net, criterion = setupModel(opt)
@@ -146,7 +143,8 @@ function train()
         optimState.learningRate = optimState.learningRate/10
     end
 
-    print((c.Red '==> '..'epoch: %d (lr = %.3f)'):format(epoch, optimState.learningRate))
+    print((c.Red '==> '..'epoch: %d (lr = %.3f)')
+            :format(epoch, optimState.learningRate))
     print(c.Green '==> '..'training')
 
     targets = cast(torch.FloatTensor(opt.batchSize))
@@ -215,12 +213,11 @@ function test()
 
     if testLogger then
         testLogger:add{trainAcc, testAcc}
---        testLogger:style{'-','-'}
     end
 
     confusion:zero()
 
-    if epoch % 5 == 0 then
+    if epoch % 2 == 0 then
         print('\n')
         print(c.Yellow '==> '.. 'saving checkpoint..')
         checkpoint.save(epoch, net, optimState, opt, isBestModel, testAcc)
