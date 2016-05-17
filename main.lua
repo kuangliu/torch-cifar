@@ -1,11 +1,17 @@
 require 'xlua'
 require 'optim'
 require 'nn'
-require './vgg.lua'
+--require './vgg.lua'
 require './resnet.lua'
 require './provider.lua'
+--require './fb.lua'
 
 c = require 'trepl.colorize'
+
+opt = lapp[[
+    -g,--gpu               (default 3)                   GPU_ID
+    -c,--checkpointPath    (default './checkpoints/')    checkpoint saving path
+]]
 
 do
     BatchFlip,parent = torch.class('nn.BatchFlip', 'nn.Module')
@@ -58,16 +64,15 @@ testLogger:setNames{'% mean class accuracy (train set)', '% mean class accuracy 
 parameters, gradParameters = net:getParameters()
 
 print(c.blue '==>' .. 'set criterion')
-
 criterion = nn.CrossEntropyCriterion():float()
 
 print(c.blue '==>' .. 'configure optimizer')
-
 optimState = {
     learningRate = 1e-3,
     learningRateDecay = 1e-7,
     weightDecay = 0.0005,
     momentum = 0.9,
+    nesterov = true
     }
 
 opt = {

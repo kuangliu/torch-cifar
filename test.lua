@@ -1,5 +1,6 @@
-args = lapp[[
--g,--gpu       (default 3)     gpu id
+opt = lapp[[
+    -g,--gpu                (default 3)                 GPU_ID
+    -c,--checkpointPath     (default './checkpoint/')   checkpoint saving path
 ]]
 
-print(args.g)
+print(opt)
