@@ -109,9 +109,15 @@ provider.trainData.data = provider.trainData.data:float()
 provider.testData.data = provider.testData.data:float()
 
 confusion = optim.ConfusionMatrix(10)
-paths.mkdir('log')
-testLogger = optim.Logger(paths.concat('log','test.log'))
-testLogger:setNames{'% mean class accuracy (train set)', '% mean class accuracy (test set)'}
+
+testLogger = xLogger(paths.concat('log', 'test.log'))
+if not opt.resume then
+    testLogger:setNames{'% mean class accuracy (train set)', '% mean class accuracy (test set)'}
+end
+
+--paths.mkdir('log')
+--testLogger = optim.Logger(paths.concat('log','test.log'))
+--testLogger:setNames{'% mean class accuracy (train set)', '% mean class accuracy (test set)'}
 
 print(c.blue '==> ' .. 'setting up model..')
 net, criterion = setupModel(opt)

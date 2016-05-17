@@ -9,10 +9,11 @@ local xLogger = torch.class('xLogger')
 local function table2String(tbl)
     local s = ''
     for _,v in pairs(tbl) do
-        s = s .. v .. '\t'
+        s = s .. ('%.2f'):format(v) .. '\t'
     end
     return s
 end
+
 
 function xLogger:__init(logName)
     self.names = {}
