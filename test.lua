@@ -8,9 +8,9 @@ opt = lapp[[
 ]]
 
 
-a = torch.load('a.t7')
 
-
-for i, m in ipairs(a:findModules('nn.ConcatTable')) do
-    print(i,m)
+epoch=nil
+for i = 1,10 do
+    epoch = epoch and epoch+1 or 1
+    print(epoch)
 end

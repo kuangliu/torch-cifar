@@ -18,7 +18,7 @@ function checkpoint.load(opt)
 end
 
 
-function checkpoint.save(epoch, model, optimState, opt, isBestModel)
+function checkpoint.save(epoch, model, optimState, opt, isBestModel, bestTestAcc)
     if opt.checkpointPath == nil then
         print('Checkpoint saving path not specified!')
         return nil
@@ -34,13 +34,12 @@ function checkpoint.save(epoch, model, optimState, opt, isBestModel)
     torch.save(latest, {
         epoch = epoch,
         modelFile = modelFile,
-        optimFile = optimFile
+        optimFile = optimFile,
+        bestTestAcc = bestTestAcc
     })
 
     if isBestModel then
-        -- TODO save best TestAcc for resuming
         torch.save(bestModel, model)
-
     end
 end
 

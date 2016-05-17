@@ -1,8 +1,7 @@
 require 'xlua'
-require 'image'
 require 'optim'
 require 'nn'
-require './vgg.lua'
+--require './vgg.lua'
 require './resnet.lua'
 require './provider.lua'
 require './checkpoints.lua'
@@ -13,17 +12,10 @@ c = require 'trepl.colorize'
 opt = lapp[[
     -g,--gpu               (default 3)                   GPU ID
     -c,--checkpointPath    (default './checkpoints/')    checkpoint saving path
-    -b,--batchSize         (default 256)                 batch size
+    -b,--batchSize         (default 32)                  batch size
     -r,--resume                                          resume from checkpoint
     -t,--type              (default float)               datatype: float/cuda
 ]]
-
-if opt.type == 'cuda' then
-    require 'cunn'
-    require 'cudnn'
-    require 'cutorch'
-    cutorch.setDevice(opt.gpu)
-end
 
 
 do
@@ -54,19 +46,16 @@ end
 function setupResNet()
     print(c.blue '==> ' .. 'setting up ResNet..')
     local net = nn.Sequential()
-    net:add(nn.BatchFlip():float())
-    net:add(cast(nn.Copy('torch.FloatTensor', torch.type(cast(torch.Tensor())))))
+    --net:add(nn.BatchFlip():float())
+
     --vgg = getVGG()
     --net:add(vgg:float())
     resnet = cifarResNet()
     --resnet = createModel()
-    net:add(cast(resnet))
-    net:get(2).updateGradInput = function(input) return end
-
-    if opt.type == 'cuda' then cudnn.convert(net:get(3), cudnn) end
+    net:add(resnet:float())
 
     print(c.blue '==> ' .. 'set criterion..')
-    local criterion = cast(nn.CrossEntropyCriterion())
+    local criterion = nn.CrossEntropyCriterion():float()
 
     return net, criterion
 end
@@ -94,7 +83,7 @@ end
 function cast(m)
     if opt.type == 'float' then
         return m:float()
-    elseif opt.type == 'cuda' then
+    else if opt.type == 'cuda' then
         return m:cuda()
     else
         error('Unknown data type: '..opt.type)
@@ -102,9 +91,8 @@ function cast(m)
 end
 
 
-print(c.blue '==> '..'loading data..')
---provider = Provider()
-provider = torch.load('provider.t7')
+print(c.blue '==> ' .. 'loading data')
+provider = Provider()
 provider.trainData.data = provider.trainData.data:float()
 provider.testData.data = provider.testData.data:float()
 
@@ -113,15 +101,15 @@ paths.mkdir('log')
 testLogger = optim.Logger(paths.concat('log','test.log'))
 testLogger:setNames{'% mean class accuracy (train set)', '% mean class accuracy (test set)'}
 
+
 print(c.blue '==> ' .. 'setting up model..')
 net, criterion = setupModel(opt)
-
 parameters, gradParameters = net:getParameters()
-criterion = criterion or cast(nn.CrossEntropyCriterion())
+criterion = criterion or nn.CrossEntropyCriterion():float()
 
-print(c.blue '==> ' .. 'configure optimizer..\n')
+print(c.blue '==> ' .. 'configure optimizer')
 optimState = optimState or {
-    learningRate = 0.1,
+    learningRate = 1e-3,
     learningRateDecay = 1e-7,
     weightDecay = 0.0005,
     momentum = 0.9,
@@ -131,24 +119,22 @@ optimState = optimState or {
 
 bestTestAcc = bestTestAcc or 0
 
-
 function train()
     net:training()
     epoch = epoch and epoch+1 or 1
 
-    if epoch % 80 == 0 then -- after some epochs, decrease lr
-        optimState.learningRate = optimState.learningRate/10
+    if epoch % 25 == 0 then -- every 25 epochs, decrease lr
+        optimState.learningRate = optimState.learningRate/2
     end
 
-    print((c.Red '==> '..'epoch: %d (lr = %.3f)'):format(epoch, optimState.learningRate))
-    print(c.Green '==> '..'training')
+    print('online epoch #' .. epoch .. ' batch size = ' .. opt.batchSize)
 
-    targets = cast(torch.FloatTensor(opt.batchSize))
+    targets = torch.FloatTensor(opt.batchSize)
 
     indices = torch.randperm(provider.trainData:size(1)):long():split(opt.batchSize)
     indices[#indices] = nil
 
-    local lastLoss = 0
+    local tic = torch.tic()
 
     for k, v in pairs(indices) do
         xlua.progress(k, #indices)
@@ -167,33 +153,36 @@ function train()
             local df_do = criterion:backward(outputs, targets)
             net:backward(inputs, df_do)
 
-            lastLoss = f
-
             confusion:batchAdd(outputs, targets)
 
             return f, gradParameters
         end
         optim.sgd(feval, parameters, optimState)
+        break
     end
 
     confusion:updateValids()
 
     trainAcc = confusion.totalValid * 100
-    print((c.Green '==> '..('Train acc: %.2f%%\tloss: %.5f '):format(trainAcc, lastLoss)))
+    print(('Train accuracy: '..c.cyan'%.2f'..' %%\t time: %.2f s'):format(
+      trainAcc, torch.toc(tic)))
 
     confusion:zero()
+
 end
 
 
 function test()
     net:evaluate()
-    print(c.Blue '==> '..'testing')
+    print(c.blue '==> ' .. 'testing')
 
     local bs = 125
     for i = 1, provider.testData.data:size(1), bs do
-        xlua.progress(math.ceil(1+i/bs), provider.testData.data:size(1)/bs)
+        xlua.progress(i, provider.testData.data:size(1))
+
         local outputs = net:forward(provider.testData.data:narrow(1,i,bs))
         confusion:batchAdd(outputs, provider.testData.labels:narrow(1,i,bs))
+        break
     end
 
     confusion:updateValids()
@@ -204,17 +193,15 @@ function test()
         bestTestAcc = testAcc
         isBestModel = true
     end
-
-    print(c.Blue '==> '..('Test acc: %.2f%% \tBest test acc: %.2f%%'):format(testAcc, bestTestAcc))
+    print('test accuracy: ', testAcc)
 
     if testLogger then
         testLogger:add{trainAcc, testAcc}
---        testLogger:style{'-','-'}
     end
 
     confusion:zero()
 
-    if epoch % 5 == 0 then
+    if epoch % 2 == 0 then
         print('\n')
         print(c.Yellow '==> '.. 'saving checkpoint..')
         checkpoint.save(epoch, net, optimState, opt, isBestModel, testAcc)
@@ -222,9 +209,9 @@ function test()
     print('\n')
 end
 
-
--- do for 500 epochs
-for i = 1,500 do
+-- do for 300 epochs
+for i = 1,300 do
     train()
     test()
+    break
 end

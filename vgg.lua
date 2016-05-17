@@ -46,7 +46,7 @@ function getVGG()
     -- Xavier/2 initialization
     for _, layer in pairs(vgg:findModules('nn.SpatialConvolution')) do
         local n = layer.kH*layer.kW*layer.nInputPlane
-        layer.weight:normal(0, math.sqrt(2/n)
+        layer.weight:normal(0, math.sqrt(2/n))
         layer.bias:zero()
     end
 
