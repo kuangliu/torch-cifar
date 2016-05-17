@@ -16,7 +16,7 @@ function shortCut(nInputPlane, nOutputPlane, stride)
     --      - 1x1 CONV: when input shape ~= output shape
     -----------------------------------------------------------------------
     if nInputPlane == nOutputPlane then
-        return nn.Identity
+        return nn.Identity()
     elseif shortCutType == 'CONV' then
         return nn.Sequential()
             :add(Conv(nInputPlane, nOutputPlane, 1, 1, stride, stride))

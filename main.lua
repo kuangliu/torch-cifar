@@ -4,14 +4,18 @@ require 'nn'
 --require './vgg.lua'
 require './resnet.lua'
 require './provider.lua'
---require './fb.lua'
+require './checkpoints.lua'
+require './fb.lua'
 
 c = require 'trepl.colorize'
 
 opt = lapp[[
-    -g,--gpu               (default 3)                   GPU_ID
+    -g,--gpu               (default 3)                   GPU ID
     -c,--checkpointPath    (default './checkpoints/')    checkpoint saving path
+    -b,--batchSize         (default 32)                  batch size
+    -r,--resume                                          resume from checkpoint
 ]]
+
 
 do
     BatchFlip,parent = torch.class('nn.BatchFlip', 'nn.Module')
@@ -37,21 +41,44 @@ do
     end
 end
 
-print(c.blue '==>' .. ' configuring model')
 
-net = nn.Sequential()
-net:add(nn.BatchFlip():float())
+function setupResNet()
+    print(c.blue '==> ' .. 'setting up ResNet..')
+    local net = nn.Sequential()
+    --net:add(nn.BatchFlip():float())
 
---vgg = getVGG()
---net:add(vgg:float())
-resnet = cifarResNet()
---resnet = createModel()
-net:add(resnet:float())
+    --vgg = getVGG()
+    --net:add(vgg:float())
+    resnet = cifarResNet()
+    --resnet = createModel()
+    net:add(resnet:float())
+
+    print(c.blue '==> ' .. 'set criterion..')
+    local criterion = nn.CrossEntropyCriterion():float()
+
+    return net, criterion
+end
 
 
-print(net)
+function setupModel(opt)
+    -- Either load from checkpoint or build a new model.
+    if opt.resume == true then
+        -- resume from checkpoint
+        print(c.blue '==> ' .. 'loading from checkpoint..')
+        latest = checkpoint.load(opt)
+        epoch = latest.epoch
+        model = torch.load(latest.modelFile)
+        optimState = torch.load(latest.optimFile)
+    else
+        -- build a new model
+        model, criterion = setupResNet()
+    end
 
-print(c.blue '==>' .. 'loading data')
+    return model, criterion
+end
+
+
+print(c.blue '==> ' .. 'loading data')
 provider = Provider()
 provider.trainData.data = provider.trainData.data:float()
 provider.testData.data = provider.testData.data:float()
@@ -61,23 +88,23 @@ paths.mkdir('log')
 testLogger = optim.Logger(paths.concat('log','test.log'))
 testLogger:setNames{'% mean class accuracy (train set)', '% mean class accuracy (test set)'}
 
+
+print(c.blue '==> ' .. 'setting up model..')
+net, criterion = setupModel(opt)
 parameters, gradParameters = net:getParameters()
+criterion = criterion or nn.CrossEntropyCriterion():float()
 
-print(c.blue '==>' .. 'set criterion')
-criterion = nn.CrossEntropyCriterion():float()
-
-print(c.blue '==>' .. 'configure optimizer')
-optimState = {
+print(c.blue '==> ' .. 'configure optimizer')
+optimState = optimState or {
     learningRate = 1e-3,
     learningRateDecay = 1e-7,
     weightDecay = 0.0005,
     momentum = 0.9,
-    nesterov = true
+    nesterov = true,
+    dampening = 0.0
     }
 
-opt = {
-    batchSize = 32
-    }
+bestTestAcc = 0
 
 function train()
     net:training()
@@ -118,21 +145,23 @@ function train()
             return f, gradParameters
         end
         optim.sgd(feval, parameters, optimState)
+        break
     end
 
     confusion:updateValids()
-    print(('Train accuracy: '..c.cyan'%.2f'..' %%\t time: %.2f s'):format(
-      confusion.totalValid * 100, torch.toc(tic)))
 
-    train_acc = confusion.totalValid * 100
+    trainAcc = confusion.totalValid * 100
+    print(('Train accuracy: '..c.cyan'%.2f'..' %%\t time: %.2f s'):format(
+      trainAcc, torch.toc(tic)))
+
     confusion:zero()
-    epoch = epoch + 1
+
 end
 
 
 function test()
     net:evaluate()
-    print(c.blue '==>' .. 'testing')
+    print(c.blue '==> ' .. 'testing')
 
     local bs = 125
     for i = 1, provider.testData.data:size(1), bs do
@@ -140,20 +169,34 @@ function test()
 
         local outputs = net:forward(provider.testData.data:narrow(1,i,bs))
         confusion:batchAdd(outputs, provider.testData.labels:narrow(1,i,bs))
+        break
     end
 
     confusion:updateValids()
-    print('test accuracy: ', confusion.totalValid * 100)
+
+    local testAcc = confusion.totalValid * 100
+    local isBestModel = false
+    if testAcc > bestTestAcc then
+        bestTestAcc = testAcc
+        isBestModel = true
+    end
+    print('test accuracy: ', testAcc)
 
     if testLogger then
-        testLogger:add{train_acc, confusion.totalValid*100}
+        testLogger:add{trainAcc, testAcc}
     end
 
     confusion:zero()
+
+    torch.save('a.t7', net)
+
+    checkpoint.save(epoch, net, optimState, opt, isBestModel)
+    epoch = epoch + 1
 end
 
 -- do for 300 epochs
 for i = 1,300 do
     train()
     test()
+    break
 end

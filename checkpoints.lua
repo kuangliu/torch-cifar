@@ -1,25 +1,24 @@
 checkpoint = {}
 
-function checkpoint.latest(opt)
+function checkpoint.load(opt)
     if opt.checkpointPath == nil then
         print('Checkpoint saving path not specified!')
         return nil      -- use `return nil` instead of `return` is a good habit
     end
 
-    local latestPath = paths.concat(opt.resume, 'latest.t7')
+    local latestPath = paths.concat(opt.checkpointPath, 'latest.t7')
     if not paths.filep(latestPath) then
         print('Latest checkpoint not exist!')
         return nil
     end
 
     local latest = torch.load(latestPath)
-    local optimState = torch.load(path.concat(opt.resume, latest.optimFile))
 
-    return latest, optimState
+    return latest
 end
 
 
-function checkpoint.save(epoch, model, optimState, isBestModel, opt)
+function checkpoint.save(epoch, model, optimState, opt, isBestModel)
     if opt.checkpointPath == nil then
         print('Checkpoint saving path not specified!')
         return nil
@@ -34,12 +33,14 @@ function checkpoint.save(epoch, model, optimState, isBestModel, opt)
     torch.save(optimFile, optimState)
     torch.save(latest, {
         epoch = epoch,
-        modelFile = modelFilem
+        modelFile = modelFile,
         optimFile = optimFile
     })
 
     if isBestModel then
+        -- TODO save best TestAcc for resuming
         torch.save(bestModel, model)
+
     end
 end
 
