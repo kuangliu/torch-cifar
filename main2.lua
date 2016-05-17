@@ -2,7 +2,10 @@ require 'xlua'
 require 'image'
 require 'optim'
 require 'nn'
-require './vgg.lua'
+require 'cunn'
+require 'cudnn'
+require 'cutorch'
+require './model.lua'
 require './resnet.lua'
 require './provider.lua'
 require './checkpoints.lua'
@@ -15,16 +18,9 @@ opt = lapp[[
     -c,--checkpointPath    (default './checkpoints/')    checkpoint saving path
     -b,--batchSize         (default 256)                 batch size
     -r,--resume                                          resume from checkpoint
-    -t,--type              (default cuda)               datatype: float/cuda
 ]]
 
-if opt.type == 'cuda' then
-    require 'cunn'
-    require 'cudnn'
-    require 'cutorch'
-    cutorch.setDevice(opt.gpu)
-end
-
+cutorch.setDevice(opt.gpu)
 
 do
     BatchFlip,parent = torch.class('nn.BatchFlip', 'nn.Module')
@@ -63,7 +59,7 @@ function setupResNet()
     net:add(cast(resnet))
     net:get(2).updateGradInput = function(input) return end
 
-    if opt.type == 'cuda' then cudnn.convert(net:get(3), cudnn) end
+    cudnn.convert(net:get(3), cudnn)
 
     print(c.blue '==> ' .. 'set criterion..')
     local criterion = cast(nn.CrossEntropyCriterion())
@@ -91,14 +87,8 @@ function setupModel(opt)
 end
 
 
-function cast(m)
-    if opt.type == 'float' then
-        return m:float()
-    elseif opt.type == 'cuda' then
-        return m:cuda()
-    else
-        error('Unknown data type: '..opt.type)
-    end
+function cast(t)
+    return t:cuda()
 end
 
 
@@ -179,7 +169,7 @@ function train()
     confusion:updateValids()
 
     trainAcc = confusion.totalValid * 100
-    print((c.Green '==> '..('Train acc: '.. c.Cyan('%.2f%%')..'\tloss: '..c.Cyan('%.5f')):format(trainAcc, lastLoss)))
+    print((c.Green '==> '..('Train acc: %.2f%%\tloss: %.5f '):format(trainAcc, lastLoss)))
 
     confusion:zero()
 end
@@ -200,12 +190,12 @@ function test()
 
     local testAcc = confusion.totalValid * 100
     local isBestModel = false
-    if testAcc > bestTestAcc then
+    if testAcc > bestTestAcc then 
         bestTestAcc = testAcc
         isBestModel = true
     end
 
-    print(c.Blue '==> '..('Test acc: '.. c.Cyan('%.2f%%')..'\tBest test acc: '..c.Cyan('%.2f%%')):format(testAcc, bestTestAcc))
+    print(c.Blue '==> '..('Test acc: %.2f%% \tBest test acc: %.2f%%'):format(testAcc, bestTestAcc))
 
     if testLogger then
         testLogger:add{trainAcc, testAcc}

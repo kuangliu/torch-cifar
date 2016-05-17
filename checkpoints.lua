@@ -12,9 +12,7 @@ function checkpoint.load(opt)
         return nil
     end
 
-    local latest = torch.load(latestPath)
-
-    return latest
+    return torch.load(latestPath)
 end
 
 

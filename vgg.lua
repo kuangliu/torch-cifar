@@ -1,8 +1,7 @@
-require 'nn';
+require 'nn'
 
-local Models = torch.class 'Models'
 
-function Models:getVGG()
+function getVGG()
     local vgg = nn.Sequential()
 
     local function ConvBNReLU(nInputPlane, nOutputPlane)
