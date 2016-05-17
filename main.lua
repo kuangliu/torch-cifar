@@ -1,22 +1,21 @@
 require 'xlua'
-require 'image'
 require 'optim'
 require 'nn'
-require 'cunn'
-require 'cudnn'
-require 'cutorch'
-require './model.lua'
+--require './vgg.lua'
 require './resnet.lua'
 require './provider.lua'
+require './checkpoints.lua'
 require './fb.lua'
 
 c = require 'trepl.colorize'
 
-args = lapp[[
-    -g,--gpu    (default 3)    GPU_ID
+opt = lapp[[
+    -g,--gpu               (default 3)                   GPU ID
+    -c,--checkpointPath    (default './checkpoints/')    checkpoint saving path
+    -b,--batchSize         (default 256)                  batch size
+    -r,--resume                                          resume from checkpoint
 ]]
 
-cutorch.setDevice(args.gpu)
 
 do
     BatchFlip,parent = torch.class('nn.BatchFlip', 'nn.Module')
@@ -43,31 +42,45 @@ do
 end
 
 
-local function cast(t)
-    return t:cuda()
+function setupResNet()
+    print(c.blue '==> ' .. 'setting up ResNet..')
+    local net = nn.Sequential()
+    --net:add(nn.BatchFlip():float())
+
+    --vgg = getVGG()
+    --net:add(vgg:float())
+    resnet = cifarResNet()
+    --resnet = createModel()
+    net:add(resnet:float())
+
+    print(c.blue '==> ' .. 'set criterion..')
+    local criterion = nn.CrossEntropyCriterion():float()
+
+    return net, criterion
 end
 
 
-print(c.blue '==> '..' configuring model')
+function setupModel(opt)
+    -- Either load from checkpoint or build a new model.
+    if opt.resume == true then
+        -- resume from checkpoint
+        print(c.blue '==> ' .. 'loading from checkpoint..')
+        latest = checkpoint.load(opt)
+        epoch = latest.epoch
+        model = torch.load(latest.modelFile)
+        optimState = torch.load(latest.optimFile)
+    else
+        -- build a new model
+        model, criterion = setupResNet()
+    end
 
-net = nn.Sequential()
-net:add(nn.BatchFlip():float())
-net:add(cast(nn.Copy('torch.FloatTensor', torch.type(cast(torch.Tensor())))))
+    return model, criterion
+end
 
---vgg = Models:getVGG()
---net:add(cast(vgg))
-resnet = cifarResNet()
---resnet = createModel()
-net:add(cast(resnet))
-net:get(2).updateGradInput = function(input) return end
 
-print(net)
-
--- use cuDNN
-cudnn.convert(net:get(3), cudnn)
-
-print(c.blue '==> '..'loading data')
-provider = Provider()
+print(c.blue '==> ' .. 'loading data')
+--provider = Provider()
+provider = torch.load('provider.t7')
 provider.trainData.data = provider.trainData.data:float()
 provider.testData.data = provider.testData.data:float()
 
@@ -76,44 +89,40 @@ paths.mkdir('log')
 testLogger = optim.Logger(paths.concat('log','test.log'))
 testLogger:setNames{'% mean class accuracy (train set)', '% mean class accuracy (test set)'}
 
+
+print(c.blue '==> ' .. 'setting up model..')
+net, criterion = setupModel(opt)
 parameters, gradParameters = net:getParameters()
+criterion = criterion or nn.CrossEntropyCriterion():float()
 
-print(c.blue '==> '..'set criterion')
-
-criterion = cast(nn.CrossEntropyCriterion())
-
-print(c.blue '==> '..'configure optimizer')
-
-optimState = {
-    learningRate = 0.1,
+print(c.blue '==> ' .. 'configure optimizer')
+optimState = optimState or {
+    learningRate = 1e-3,
     learningRateDecay = 1e-7,
     weightDecay = 0.0005,
     momentum = 0.9,
+    nesterov = true,
+    dampening = 0.0
     }
 
-opt = {
-    batchSize = 256
-    }
-
+bestTestAcc = 0
 
 function train()
     net:training()
     epoch = epoch or 1
 
-    if epoch % 80 == 0 then -- after some epochs, decrease lr
-        optimState.learningRate = optimState.learningRate/10
+    if epoch % 25 == 0 then -- every 25 epochs, decrease lr
+        optimState.learningRate = optimState.learningRate/2
     end
 
-    print((c.Red '==> '..'epoch: %d (lr = %.3f)'):format(epoch, optimState.learningRate))
+    print('online epoch #' .. epoch .. ' batch size = ' .. opt.batchSize)
 
-    print(c.Green '==> '..'training')
-
-    targets = cast(torch.FloatTensor(opt.batchSize))
+    targets = torch.FloatTensor(opt.batchSize)
 
     indices = torch.randperm(provider.trainData:size(1)):long():split(opt.batchSize)
     indices[#indices] = nil
 
-    local lastLoss = 0
+    local tic = torch.tic()
 
     for k, v in pairs(indices) do
         xlua.progress(k, #indices)
@@ -132,8 +141,6 @@ function train()
             local df_do = criterion:backward(outputs, targets)
             net:backward(inputs, df_do)
 
-            lastLoss = f
-	
             confusion:batchAdd(outputs, targets)
 
             return f, gradParameters
@@ -142,41 +149,52 @@ function train()
     end
 
     confusion:updateValids()
-    
-    train_acc = confusion.totalValid * 100
-    print((c.Green '==> '..('Train acc: %.2f%%\tloss: %.5f '):format(train_acc, lastLoss)))
-    
+
+    trainAcc = confusion.totalValid * 100
+    print(('Train accuracy: '..c.cyan'%.2f'..' %%\t time: %.2f s'):format(
+      trainAcc, torch.toc(tic)))
+
     confusion:zero()
-    epoch = epoch + 1
+
 end
 
 
 function test()
     net:evaluate()
-    print(c.Blue '==> '..'testing')
+    print(c.blue '==> ' .. 'testing')
 
     local bs = 125
     for i = 1, provider.testData.data:size(1), bs do
-        xlua.progress(math.ceil(1+i/bs), provider.testData.data:size(1)/bs)
+        xlua.progress(i, provider.testData.data:size(1))
+
         local outputs = net:forward(provider.testData.data:narrow(1,i,bs))
         confusion:batchAdd(outputs, provider.testData.labels:narrow(1,i,bs))
     end
 
     confusion:updateValids()
-    print(c.Blue '==> '..('Test acc: %.2f%% '):format(confusion.totalValid * 100))
-    print('\n')
+
+    local testAcc = confusion.totalValid * 100
+    local isBestModel = false
+    if testAcc > bestTestAcc then
+        bestTestAcc = testAcc
+        isBestModel = true
+    end
+    print('test accuracy: ', testAcc)
 
     if testLogger then
-        testLogger:add{train_acc, confusion.totalValid*100}
---        testLogger:style{'-','-'}
+        testLogger:add{trainAcc, testAcc}
     end
 
     confusion:zero()
+
+    torch.save('a.t7', net)
+
+    checkpoint.save(epoch, net, optimState, opt, isBestModel)
+    epoch = epoch + 1
 end
 
-
--- do for 500 epochs
-for i = 1,500 do
+-- do for 300 epochs
+for i = 1,300 do
     train()
     test()
 end

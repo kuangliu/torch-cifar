@@ -6,7 +6,7 @@ MaxPool = nn.SpatialMaxPooling
 AvgPool = nn.SpatialAveragePooling
 BN = nn.SpatialBatchNormalization
 
-local shortCutType = 'ZERO_PAD' or 'CONV'
+local shortCutType =  'CONV' or 'ZERO_PAD'
 
 function shortCut(nInputPlane, nOutputPlane, stride)
     -----------------------------------------------------------------------
@@ -16,7 +16,7 @@ function shortCut(nInputPlane, nOutputPlane, stride)
     --      - 1x1 CONV: when input shape ~= output shape
     -----------------------------------------------------------------------
     if nInputPlane == nOutputPlane then
-        return nn.Identity
+        return nn.Identity()
     elseif shortCutType == 'CONV' then
         return nn.Sequential()
             :add(Conv(nInputPlane, nOutputPlane, 1, 1, stride, stride))
@@ -93,10 +93,10 @@ function cifarResNet()
     net:add(BN(16))
     net:add(ReLU(true))
 
-    net:add(nBlob(16,16,3))
-    net:add(nBlob(16,32,3,2))
-    net:add(nBlob(32,64,3,2))
-    --net:add(nBlob(64,64,3,2))
+    net:add(nBlob(16,16,4))
+    net:add(nBlob(16,32,4,2))
+    net:add(nBlob(32,64,4,2))
+--    net:add(nBlob(64,128,4,2))
 
     net:add(AvgPool(8,8,1,1))
     net:add(nn.View(64):setNumInputDims(3))
