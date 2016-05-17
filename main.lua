@@ -77,6 +77,7 @@ function setupModel(opt)
         epoch = latest.epoch
         model = torch.load(latest.modelFile)
         optimState = torch.load(latest.optimFile)
+        bestTestAcc = latest.bestTestAcc
     else
         -- build a new model
         model, criterion = setupResNet()
@@ -108,7 +109,7 @@ net, criterion = setupModel(opt)
 parameters, gradParameters = net:getParameters()
 criterion = criterion or cast(nn.CrossEntropyCriterion())
 
-print(c.blue '==> ' .. 'configure optimizer\n')
+print(c.blue '==> ' .. 'configure optimizer..\n')
 optimState = optimState or {
     learningRate = 0.1,
     learningRateDecay = 1e-7,
@@ -118,7 +119,7 @@ optimState = optimState or {
     dampening = 0.0
     }
 
-bestTestAcc = 0
+bestTestAcc = bestTestAcc or 0
 
 
 function train()
@@ -189,12 +190,12 @@ function test()
 
     local testAcc = confusion.totalValid * 100
     local isBestModel = false
-    if testAcc > bestTestAcc then
+    if testAcc > bestTestAcc then 
         bestTestAcc = testAcc
         isBestModel = true
     end
 
-    print(c.Blue '==> '..('Test acc: %.2f%% '):format(testAcc))
+    print(c.Blue '==> '..('Test acc: %.2f%% \tBest test acc: %.2f%%'):format(testAcc, bestTestAcc))
 
     if testLogger then
         testLogger:add{trainAcc, testAcc}
@@ -203,10 +204,10 @@ function test()
 
     confusion:zero()
 
-    if epoch % 20 == 0 then
+    if epoch % 2 == 0 then
         print('\n')
         print(c.Yellow '==> '.. 'saving checkpoint..')
-        checkpoint.save(epoch, net, optimState, opt, isBestModel)
+        checkpoint.save(epoch, net, optimState, opt, isBestModel, testAcc)
     end
     print('\n')
 end
