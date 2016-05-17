@@ -1,7 +1,11 @@
 require 'xlua'
+require 'image'
 require 'optim'
 require 'nn'
---require './vgg.lua'
+require 'cunn'
+require 'cudnn'
+require 'cutorch'
+require './model.lua'
 require './resnet.lua'
 require './provider.lua'
 require './checkpoints.lua'
@@ -16,6 +20,7 @@ opt = lapp[[
     -r,--resume                                          resume from checkpoint
 ]]
 
+cutorch.setDevice(opt.gpu)
 
 do
     BatchFlip,parent = torch.class('nn.BatchFlip', 'nn.Module')
@@ -45,20 +50,22 @@ end
 function setupResNet()
     print(c.blue '==> ' .. 'setting up ResNet..')
     local net = nn.Sequential()
-    --net:add(nn.BatchFlip():float())
-
+    net:add(nn.BatchFlip():float())
+    net:add(cast(nn.Copy('torch.FloatTensor', torch.type(cast(torch.Tensor())))))
     --vgg = getVGG()
     --net:add(vgg:float())
     resnet = cifarResNet()
     --resnet = createModel()
-    net:add(resnet:float())
+    net:add(cast(resnet))
+    net:get(2).updateGradInput = function(input) return end
+
+    cudnn.convert(net:get(3), cudnn)
 
     print(c.blue '==> ' .. 'set criterion..')
-    local criterion = nn.CrossEntropyCriterion():float()
+    local criterion = cast(nn.CrossEntropyCriterion())
 
     return net, criterion
 end
-
 
 function setupModel(opt)
     -- Either load from checkpoint or build a new model.
@@ -78,7 +85,12 @@ function setupModel(opt)
 end
 
 
-print(c.blue '==> ' .. 'loading data')
+function cast(t)
+    return t:cuda()
+end
+
+
+print(c.blue '==> '..' loading data..')
 --provider = Provider()
 provider = torch.load('provider.t7')
 provider.trainData.data = provider.trainData.data:float()
@@ -89,11 +101,13 @@ paths.mkdir('log')
 testLogger = optim.Logger(paths.concat('log','test.log'))
 testLogger:setNames{'% mean class accuracy (train set)', '% mean class accuracy (test set)'}
 
-
 print(c.blue '==> ' .. 'setting up model..')
 net, criterion = setupModel(opt)
+
 parameters, gradParameters = net:getParameters()
-criterion = criterion or nn.CrossEntropyCriterion():float()
+criterion = criterion or cast(nn.CrossEntropyCriterion())
+
+parameters, gradParameters = net:getParameters()
 
 print(c.blue '==> ' .. 'configure optimizer')
 optimState = optimState or {
@@ -111,18 +125,20 @@ function train()
     net:training()
     epoch = epoch or 1
 
-    if epoch % 25 == 0 then -- every 25 epochs, decrease lr
-        optimState.learningRate = optimState.learningRate/2
+    if epoch % 80 == 0 then -- after some epochs, decrease lr
+        optimState.learningRate = optimState.learningRate/10
     end
 
-    print('online epoch #' .. epoch .. ' batch size = ' .. opt.batchSize)
+    print((c.Red '==> '..'epoch: %d (lr = %.3f)'):format(epoch, optimState.learningRate))
 
-    targets = torch.FloatTensor(opt.batchSize)
+    print(c.Green '==> '..'training')
+
+    targets = cast(torch.FloatTensor(opt.batchSize))
 
     indices = torch.randperm(provider.trainData:size(1)):long():split(opt.batchSize)
     indices[#indices] = nil
 
-    local tic = torch.tic()
+    local lastLoss = 0
 
     for k, v in pairs(indices) do
         xlua.progress(k, #indices)
@@ -141,6 +157,8 @@ function train()
             local df_do = criterion:backward(outputs, targets)
             net:backward(inputs, df_do)
 
+            lastLoss = f
+
             confusion:batchAdd(outputs, targets)
 
             return f, gradParameters
@@ -151,22 +169,20 @@ function train()
     confusion:updateValids()
 
     trainAcc = confusion.totalValid * 100
-    print(('Train accuracy: '..c.cyan'%.2f'..' %%\t time: %.2f s'):format(
-      trainAcc, torch.toc(tic)))
+    print((c.Green '==> '..('Train acc: %.2f%%\tloss: %.5f '):format(trainAcc, lastLoss)))
 
     confusion:zero()
-
+    epoch = epoch + 1
 end
 
 
 function test()
     net:evaluate()
-    print(c.blue '==> ' .. 'testing')
+    print(c.Blue '==> '..'testing')
 
     local bs = 125
     for i = 1, provider.testData.data:size(1), bs do
-        xlua.progress(i, provider.testData.data:size(1))
-
+        xlua.progress(math.ceil(1+i/bs), provider.testData.data:size(1)/bs)
         local outputs = net:forward(provider.testData.data:narrow(1,i,bs))
         confusion:batchAdd(outputs, provider.testData.labels:narrow(1,i,bs))
     end
@@ -179,22 +195,27 @@ function test()
         bestTestAcc = testAcc
         isBestModel = true
     end
-    print('test accuracy: ', testAcc)
+
+    print(c.Blue '==> '..('Test acc: %.2f%% '):format(testAcc))
 
     if testLogger then
         testLogger:add{trainAcc, testAcc}
+--        testLogger:style{'-','-'}
     end
 
     confusion:zero()
 
-    torch.save('a.t7', net)
-
-    checkpoint.save(epoch, net, optimState, opt, isBestModel)
-    epoch = epoch + 1
+    if epoch % 20 == 0 then
+        print('\n')
+        print(c.Yellow '==> '.. 'saving checkpoint..')
+        checkpoint.save(epoch, net, optimState, opt, isBestModel)
+    end
+    print('\n')
 end
 
--- do for 300 epochs
-for i = 1,300 do
+
+-- do for 500 epochs
+for i = 1,500 do
     train()
     test()
 end
