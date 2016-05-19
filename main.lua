@@ -59,7 +59,7 @@ function setupResNet()
     net:add(cast(nn.Copy('torch.FloatTensor', torch.type(cast(torch.Tensor())))))
     --vgg = getVGG()
     --net:add(vgg:float())
-    resnet = cifarResNet()
+    resnet = getResNet()
     --resnet = createModel()
     net:add(cast(resnet))
     net:get(2).updateGradInput = function(input) return end
