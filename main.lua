@@ -14,7 +14,7 @@ c = require 'trepl.colorize'
 opt = lapp[[
     -g,--gpu               (default 3)                   GPU ID
     -c,--checkpointPath    (default './checkpoints/')    checkpoint saving path
-    -b,--batchSize         (default 256)                 batch size
+    -b,--batchSize         (default 16)                 batch size
     -r,--resume                                          resume from checkpoint
     -t,--type              (default float)               datatype: float/cuda
 ]]
