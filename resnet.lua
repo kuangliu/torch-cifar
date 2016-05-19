@@ -63,6 +63,16 @@ end
 
 
 function ninBlob(nFirstConvPlane, stride)
+    -----------------------------------------------------------------------
+    -- Network in Network blob.
+    -- NIN follows the CNN structure:
+    --      1. 1x1 CONV with nFirstConvPlane channels
+    --      2. 3x3 CONV with nFirstConvPlane channels
+    --      3. 1x1 CONV with 4*nFirstConvPlane channles
+    -- Inputs:
+    --      - nFirstConvPlane: CONV channels of the first CONV layer
+    --      - stride: CONV stride
+    -----------------------------------------------------------------------
     local nInputPlane = nPlane              -- intput data channels
     local nOutputPlane = 4*nFirstConvPlane  -- first conv layer channels
     nPlane = nOutputPlane                   -- nPlane flow between blobs
