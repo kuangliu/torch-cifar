@@ -7,7 +7,7 @@ AvgPool = nn.SpatialAveragePooling
 BN = nn.SpatialBatchNormalization
 
 local shortCutType = 'CONV' or 'ZERO_PAD'
-local blobType = not 'NIN' or 'BASIC'
+local blobType = 'NIN' or 'BASIC'
 
 
 function shortCut(nInputPlane, nOutputPlane, stride)
@@ -62,34 +62,9 @@ function basicBlob(nConvPlane, stride)
 end
 
 
-function nBasicBlob(nConvPlane, n, stride)
-    -------------------------------------------------------------------------
-    -- Stack n basic blobs together, each of these blobs share the same filter num.
-    -- Inputs:
-    --      - nConvPlane: CONV channels of all n blobs
-    --      - n: # of blobs
-    --      - stride: CONV stride of first blob, could be 1 or 2
-    --          - stride=1: maintain input H&W
-    --          - stride=2: decrease input H&W by half
-    -------------------------------------------------------------------------
-    local s = nn.Sequential()
-
-    -- The first blob of nBlob
-    s:add(basicBlob(nConvPlane, stride))
-
-    -- The rest blobs of nBlob: # of CONV kernels unchanged, and use `stride=1`
-    for i = 2,n do
-        -- For the first blob of nBlob, use stride=2 to decrease the size
-        s:add(basicBlob(nConvPlane, 1))
-    end
-
-    return s
-end
-
-
-function ninBlob(nOutputPlane, stride)
+function ninBlob(nFirstConvPlane, stride)
     local nInputPlane = nPlane              -- intput data channels
-    local nFirstConvPlane = nOutputPlane/4  -- first conv layer channels
+    local nOutputPlane = 4*nFirstConvPlane  -- first conv layer channels
     nPlane = nOutputPlane                   -- nPlane flow between blobs
 
     local s = nn.Sequential()
@@ -111,13 +86,34 @@ function ninBlob(nOutputPlane, stride)
 end
 
 
-function nNINBlob(nOutputPlane, n, stride)
-    local s = nn.Sequential()
+function nBlob(nFirstConvPlane, n, stride)
+    -------------------------------------------------------------------------
+    -- Stack n basic/NIN blobs together
+    -- Inputs:
+    --      - nFirstConvPlane: CONV channels of the first CONV layer
+    --          - For basicBlob: all CONV layers in the nBlob share the same CONV channels (=nFirstConvPlane)
+    --          - For ninBlob:
+    --              - nSecondConvPlane = nFirstConvPlan
+    --              - nThirdConvPlane = 4*nFirstConvPlane
+    --      - n: # of blobs
+    --      - stride: CONV stride of first blob, could be 1 or 2
+    --          - stride=1: maintain input H&W
+    --          - stride=2: decrease input H&W by half
+    -------------------------------------------------------------------------
+    local blob
+    if blobType == 'BASIC' then
+        blob = basicBlob
+    elseif blobType == 'NIN' then
+        blob = ninBlob
+    else
+        error('Unknown blobType..'..blobType)
+    end
 
-    s:add(ninBlob(nOutputPlane, stride))
+    local s = nn.Sequential()
+    s:add(blob(nFirstConvPlane, stride))
 
     for i = 2,n do
-        s:add(ninBlob(nOutputPlane, 1))
+        s:add(blob(nFirstConvPlane, 1))
     end
 
     return s
@@ -129,26 +125,26 @@ function getResNet()
     -- Define the CIFAR-10 ResNet
     --------------------------------------------------
     local net = nn.Sequential()
-    net:add(Conv(3,16,3,3,1,1,1,1))
-    net:add(BN(16))
-    -- net:add(Conv(3,64,3,3,1,1,1,1))
-    -- net:add(BN(64))
+    -- net:add(Conv(3,16,3,3,1,1,1,1))
+    -- net:add(BN(16))
+    net:add(Conv(3,64,3,3,1,1,1,1))
+    net:add(BN(64))
     net:add(ReLU(true))
 
-    nPlane = 16
+    nPlane = 64
 
-    net:add(nBasicBlob(16,3,1))
-    net:add(nBasicBlob(32,3,2))
-    net:add(nBasicBlob(64,3,2))
-    --net:add(nBasicBlob(64,64,3,2))
+    -- net:add(nBlob(16,3,1))
+    -- net:add(nBlob(32,3,2))
+    -- net:add(nBlob(64,3,2))
+    --net:add(nBlob(64,64,3,2))
 
-    -- net:add(nNINBlob(256,3,1))
-    -- net:add(nNINBlob(512,3,2))
-    -- net:add(nNINBlob(1024,3,2))
+    net:add(nBlob(64,3,1))
+    net:add(nBlob(128,3,2))
+    net:add(nBlob(256,3,2))
 
     net:add(AvgPool(8,8,1,1))
-    net:add(nn.View(64):setNumInputDims(3))
-    net:add(nn.Linear(64,10))
+    net:add(nn.View(1024):setNumInputDims(3))
+    net:add(nn.Linear(1024,10))
 
     print(net)
 
