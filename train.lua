@@ -5,9 +5,11 @@ require 'optim'
 require './fb.lua'
 require './vgg.lua'
 require './resnet.lua'
+require './augment.lua'
 require './xLogger.lua'
 require './provider.lua'
 require './checkpoints.lua'
+
 
 c = require 'trepl.colorize'
 
@@ -26,44 +28,21 @@ if opt.type == 'cuda' then
     cutorch.setDevice(opt.gpu)
 end
 
-do
-    BatchFlip,parent = torch.class('nn.BatchFlip', 'nn.Module')
-
-    function BatchFlip:__init()
-        parent.__init(self)
-        self.train = true
-    end
-
-    function BatchFlip:updateOutput(input)
-        if self.train then
-            local batchSize = input:size(1)
-            local flipMask = torch.randperm(batchSize):le(batchSize/2)
-
-            for i = 1, batchSize do
-                if flipMask[i] == 1 then
-                    image.hflip(input[i], input[i])
-                end
-            end
-        end
-        self.output:set(input)
-        return self.output
-    end
-end
-
 
 function setupResNet()
     print(c.blue '==> ' .. 'setting up ResNet..')
     local net = nn.Sequential()
     net:add(nn.BatchFlip():float())
+    net:add(nn.RandomCrop(4, 'zero'):float())
+
     net:add(cast(nn.Copy('torch.FloatTensor', torch.type(cast(torch.Tensor())))))
     --vgg = getVGG()
     --net:add(vgg:float())
     resnet = getResNet()
     --resnet = createModel()
     net:add(cast(resnet))
-    net:get(2).updateGradInput = function(input) return end
-
-    if opt.type == 'cuda' then cudnn.convert(net:get(3), cudnn) end
+    --net:get(2).updateGradInput = function(input) return end
+    if opt.type == 'cuda' then cudnn.convert(net:get(4), cudnn) end
 
     print(c.blue '==> ' .. 'set criterion..')
     local criterion = cast(nn.CrossEntropyCriterion())
@@ -86,6 +65,7 @@ function setupModel(opt)
         -- build a new model
         model, criterion = setupResNet()
     end
+    print(model)
 
     return model, criterion
 end
@@ -100,7 +80,6 @@ function cast(m)
         error('Unknown data type: '..opt.type)
     end
 end
-
 
 print(c.blue '==> '..'loading data..')
 --provider = Provider()
