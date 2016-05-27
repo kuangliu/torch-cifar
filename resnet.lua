@@ -156,9 +156,6 @@ function getResNet()
     net:add(nn.View(1024):setNumInputDims(3))
     net:add(nn.Linear(1024,10))
 
-    print(net)
-
-
     --Xavier/2 initialization
     for _, layer in pairs(net:findModules('nn.SpatialConvolution')) do
         local n = layer.kH*layer.kW*layer.nOutputPlane
