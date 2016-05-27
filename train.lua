@@ -151,8 +151,7 @@ function train()
     indices = torch.randperm(provider.trainData:size(1)):long():split(opt.batchSize)
     indices[#indices] = nil
 
-    local lastLoss = 0
-
+    local loss = 0
     for k, v in pairs(indices) do
         xlua.progress(k, #indices)
 
@@ -170,8 +169,7 @@ function train()
             local df_do = criterion:backward(outputs, targets)
             net:backward(inputs, df_do)
 
-            lastLoss = f
-
+            loss = loss + f
             confusion:batchAdd(outputs, targets)
 
             return f, gradParameters
@@ -182,7 +180,7 @@ function train()
     confusion:updateValids()
 
     trainAcc = confusion.totalValid * 100
-    print((c.Green '==> '..('Train acc: '.. c.Cyan('%.2f%%')..'\tloss: '..c.Cyan('%.5f')):format(trainAcc, lastLoss)))
+    print((c.Green '==> '..('Train acc: '.. c.Cyan('%.2f%%')..'\tloss: '..c.Cyan('%.5f')):format(trainAcc, loss/#indices)))
 
     confusion:zero()
 end
