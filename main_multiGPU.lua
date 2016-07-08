@@ -1,7 +1,9 @@
 require 'nn'
+require 'cunn'
 require 'xlua'
 require 'image'
 require 'optim'
+require 'cutorch'
 require './fb.lua'
 require './vgg.lua'
 require './resnet.lua'
@@ -10,42 +12,58 @@ require './xLogger.lua'
 require './provider.lua'
 require './checkpoints.lua'
 
-
+cudnn = require 'cudnn'
+optnet = require 'optnet'
 c = require 'trepl.colorize'
 
 opt = lapp[[
-    -g,--gpu               (default 3)                   GPU ID
+    -n,--nGPU              (default 1)                   num of GPUs to use
+    -b,--batchSize         (default 28)                 batch size
     -c,--checkpointPath    (default './checkpoints/')    checkpoint saving path
-    -b,--batchSize         (default 128)                  batch size
     -r,--resume                                          resume from checkpoint
-    -t,--type              (default cuda)               datatype: float/cuda
 ]]
-
-if opt.type == 'cuda' then
-    require 'cunn'
-    require 'cudnn'
-    require 'cutorch'
-    cutorch.setDevice(opt.gpu)
-end
 
 
 function setupResNet()
     print(c.blue '==> ' .. 'setting up ResNet..')
-    local net = nn.Sequential()
-    net:add(nn.BatchFlip():float())
-    net:add(nn.RandomCrop(4, 'zero'):float())
 
-    net:add(cast(nn.Copy('torch.FloatTensor', torch.type(cast(torch.Tensor())))))
-    --vgg = getVGG()
-    --net:add(vgg:float())
-    resnet = getResNet()
-    --resnet = createModel()
-    net:add(cast(resnet))
-    --net:get(2).updateGradInput = function(input) return end
-    --if opt.type == 'cuda' then cudnn.convert(net:get(4), cudnn) end
+    local resnet = getResNet()
+	-- this replaces 'nn' modules with 'cudnn' counterparts in-place
+    cudnn.convert(resnet, cudnn):cuda()
+
+    -- use 'optnet' to reduce memory useage
+	local sample_input = torch.randn(8,3,32,32):cuda()
+    optnet.optimizeMemory(resnet, sample_input, {inplace = false, mode = 'training'})
+
+	-- with this cudnn will optimize itself for efficiency
+    cudnn.benchmark = true
+
+	-- init whole net
+    --local net = nn.Sequential()
+    --            :add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
+    --            :cuda()
+    local net = nn.Sequential()
+                :add(nn.BatchFlip():float())
+                :add(nn.RandomCrop(4, 'zero'):float())
+                :add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
+
+    if opt.nGPU == 1 then
+        -- use single GPU, use the first on in default
+		net:add(resnet)
+		cutorch.setDevice(1)  -- change the GPU ID as you like
+    else
+		-- multi-GPU, use GPU #1,#2,...,#n
+        local gpus = torch.range(1, opt.nGPU):totable()
+        net:add(nn.DataParallelTable(1, true, true)
+        :add(resnet, gpus)
+        :threads(function()
+           local cudnn = require 'cudnn'
+           cudnn.benchmark = true
+        end))
+    end
 
     print(c.blue '==> ' .. 'set criterion..')
-    local criterion = cast(nn.CrossEntropyCriterion())
+    local criterion = nn.CrossEntropyCriterion():cuda()
 
     return net, criterion
 end
@@ -71,16 +89,6 @@ function setupModel(opt)
 end
 
 
-function cast(m)
-    if opt.type == 'float' then
-        return m:float()
-    elseif opt.type == 'cuda' then
-        return m:cuda()
-    else
-        error('Unknown data type: '..opt.type)
-    end
-end
-
 print(c.blue '==> '..'loading data..')
 --provider = Provider()
 provider = torch.load('provider.t7')
@@ -98,7 +106,7 @@ print(c.blue '==> ' .. 'setting up model..')
 net, criterion = setupModel(opt)
 
 parameters, gradParameters = net:getParameters()
-criterion = criterion or cast(nn.CrossEntropyCriterion())
+criterion = criterion or nn.CrossEntropyCriterion():cuda()
 
 print(c.blue '==> ' .. 'configure optimizer..\n')
 optimState = optimState or {
@@ -125,7 +133,7 @@ function train()
             :format(epoch, optimState.learningRate))
     print(c.Green '==> '..'training')
 
-    targets = cast(torch.FloatTensor(opt.batchSize))
+    targets = torch.CudaTensor(opt.batchSize)
 
     indices = torch.randperm(provider.trainData:size(1)):long():split(opt.batchSize)
     indices[#indices] = nil
@@ -135,7 +143,8 @@ function train()
         xlua.progress(k, #indices)
 
         inputs = provider.trainData.data:index(1,v)    -- [N, C, H, W]
-        targets:copy(provider.trainData.labels:index(1,v))
+        print(torch.type(inputs))
+		targets:copy(provider.trainData.labels:index(1,v))
 
         feval = function(x)
             if x~= parameters then
