@@ -34,7 +34,7 @@ function getVGG()
     ConvBNReLU(512,512):add(nn.Dropout(0.4))
     ConvBNReLU(512,512)
     vgg:add(MaxPooling(2,2,2,2):ceil())
-    vgg:add(nn.View(512))
+    vgg:add(nn.View(512):setNumInputDims(3))
 
     vgg:add(nn.Dropout(0.5))
     vgg:add(nn.Linear(512,512))
