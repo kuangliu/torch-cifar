@@ -17,8 +17,8 @@ optnet = require 'optnet'
 c = require 'trepl.colorize'
 
 opt = lapp[[
-    -n,--nGPU              (default 1)                   num of GPUs to use
-    -b,--batchSize         (default 28)                 batch size
+    -n,--nGPU              (default 2)                   num of GPUs to use
+    -b,--batchSize         (default 128)                 batch size
     -c,--checkpointPath    (default './checkpoints/')    checkpoint saving path
     -r,--resume                                          resume from checkpoint
 ]]
@@ -28,38 +28,41 @@ function setupResNet()
     print(c.blue '==> ' .. 'setting up ResNet..')
 
     local resnet = getResNet()
+	--local resnet = getVGG()
+	
 	-- this replaces 'nn' modules with 'cudnn' counterparts in-place
     cudnn.convert(resnet, cudnn):cuda()
 
-    -- use 'optnet' to reduce memory useage
-	local sample_input = torch.randn(8,3,32,32):cuda()
-    optnet.optimizeMemory(resnet, sample_input, {inplace = false, mode = 'training'})
-
 	-- with this cudnn will optimize itself for efficiency
+	cudnn.fastest = true
     cudnn.benchmark = true
 
 	-- init whole net
-    --local net = nn.Sequential()
-    --            :add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
-    --            :cuda()
     local net = nn.Sequential()
-                :add(nn.BatchFlip():float())
-                :add(nn.RandomCrop(4, 'zero'):float())
-                :add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
+	            :add(nn.BatchFlip():float())
+		        :add(nn.RandomCrop(4, 'zero'):float())
+		        :add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
 
-    if opt.nGPU == 1 then
+	-- DO NOT USE THIS IF YOU MUST
+    -- use 'optnet' to reduce memory useage 
+	--local sample_input = torch.randn(1,3,32,32):float()
+    --optnet.optimizeMemory(net, sample_input, {inplace = false, mode = 'training'})
+    
+	if opt.nGPU == 1 then
         -- use single GPU, use the first on in default
 		net:add(resnet)
 		cutorch.setDevice(1)  -- change the GPU ID as you like
     else
 		-- multi-GPU, use GPU #1,#2,...,#n
         local gpus = torch.range(1, opt.nGPU):totable()
-        net:add(nn.DataParallelTable(1, true, true)
-        :add(resnet, gpus)
-        :threads(function()
-           local cudnn = require 'cudnn'
-           cudnn.benchmark = true
-        end))
+
+		local dpt = nn.DataParallelTable(1, true, true)
+					:add(resnet, gpus)
+					:threads(function()
+						local cudnn = require 'cudnn'
+						cudnn.fastest, cudnn.benchmark = true, true
+					end)
+		net:add(dpt:cuda())
     end
 
     print(c.blue '==> ' .. 'set criterion..')
@@ -143,7 +146,6 @@ function train()
         xlua.progress(k, #indices)
 
         inputs = provider.trainData.data:index(1,v)    -- [N, C, H, W]
-        print(torch.type(inputs))
 		targets:copy(provider.trainData.labels:index(1,v))
 
         feval = function(x)
@@ -157,6 +159,8 @@ function train()
             local df_do = criterion:backward(outputs, targets)
             net:backward(inputs, df_do)
 
+			print(f)
+
             loss = loss + f
             confusion:batchAdd(outputs, targets)
 
@@ -164,8 +168,8 @@ function train()
         end
         optim.sgd(feval, parameters, optimState)
     end
-
-    confusion:updateValids()
+    
+	confusion:updateValids()
 
     trainAcc = confusion.totalValid * 100
     print((c.Green '==> '..('Train acc: '.. c.Cyan('%.2f%%')..'\tloss: '..c.Cyan('%.5f')):format(trainAcc, loss/#indices)))
@@ -205,7 +209,7 @@ function test()
     if epoch % 2 == 0 then
         print('\n')
         print(c.Yellow '==> '.. 'saving checkpoint..')
-        checkpoint.save(epoch, net, optimState, opt, isBestModel, testAcc)
+--        checkpoint.save(epoch, net, optimState, opt, isBestModel, testAcc)
     end
     print('\n')
 end
