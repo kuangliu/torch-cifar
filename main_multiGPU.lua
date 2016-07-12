@@ -28,41 +28,41 @@ function setupResNet()
     print(c.blue '==> ' .. 'setting up ResNet..')
 
     local resnet = getResNet()
-	--local resnet = getVGG()
+    --local resnet = getVGG()
 
-	-- this replaces 'nn' modules with 'cudnn' counterparts in-place
+    -- this replaces 'nn' modules with 'cudnn' counterparts in-place
     cudnn.convert(resnet, cudnn):cuda()
 
-	-- with this cudnn will optimize itself for efficiency
-	cudnn.fastest = true
+    -- with this cudnn will optimize itself for efficiency
+    cudnn.fastest = true
     cudnn.benchmark = true
 
-	-- init whole net
+    -- init whole net
     local net = nn.Sequential()
-	            :add(nn.BatchFlip():float())
-		        :add(nn.RandomCrop(4, 'zero'):float())
-		        :add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
+                  :add(nn.BatchFlip():float())
+                  :add(nn.RandomCrop(4, 'zero'):float())
+                  :add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
 
-	-- DO NOT USE THIS IF YOU MUST
+    -- DO NOT USE THIS IF YOU MUST
     -- use 'optnet' to reduce memory useage
-	--local sample_input = torch.randn(1,3,32,32):float()
+    --local sample_input = torch.randn(1,3,32,32):float()
     --optnet.optimizeMemory(net, sample_input, {inplace = false, mode = 'training'})
 
-	if opt.nGPU == 1 then
+    if opt.nGPU == 1 then
         -- use single GPU, use the first on in default
-		net:add(resnet)
-		cutorch.setDevice(1)  -- change the GPU ID as you like
+        net:add(resnet)
+        cutorch.setDevice(1)  -- change the GPU ID as you like
     else
-		-- multi-GPU, use GPU #1,#2,...,#n
+        -- multi-GPU, use GPU #1,#2,...,#n
         local gpus = torch.range(1, opt.nGPU):totable()
 
-		local dpt = nn.DataParallelTable(1, true, true)
-					:add(resnet, gpus)
-					:threads(function()
-						local cudnn = require 'cudnn'
-						cudnn.fastest, cudnn.benchmark = true, true
-					end)
-		net:add(dpt:cuda())
+        local dpt = nn.DataParallelTable(1, true, true)
+                      :add(resnet, gpus)
+                      :threads(function()
+                          local cudnn = require 'cudnn'
+                          cudnn.fastest, cudnn.benchmark = true, true
+                      end)
+        net:add(dpt:cuda())
     end
 
     print(c.blue '==> ' .. 'set criterion..')
@@ -90,7 +90,6 @@ function setupModel(opt)
 
     return model, criterion
 end
-
 
 print(c.blue '==> '..'loading data..')
 --provider = Provider()
@@ -146,7 +145,7 @@ function train()
         xlua.progress(k, #indices)
 
         inputs = provider.trainData.data:index(1,v)    -- [N, C, H, W]
-		targets:copy(provider.trainData.labels:index(1,v))
+        targets:copy(provider.trainData.labels:index(1,v))
 
         feval = function(x)
             if x~= parameters then
@@ -158,7 +157,6 @@ function train()
             local f = criterion:forward(outputs, targets)
             local df_do = criterion:backward(outputs, targets)
             net:backward(inputs, df_do)
-
 			print(f)
 
             loss = loss + f
@@ -169,7 +167,7 @@ function train()
         optim.sgd(feval, parameters, optimState)
     end
 
-	confusion:updateValids()
+    confusion:updateValids()
 
     trainAcc = confusion.totalValid * 100
     print((c.Green '==> '..('Train acc: '.. c.Cyan('%.2f%%')..'\tloss: '..c.Cyan('%.5f')):format(trainAcc, loss/#indices)))
