@@ -29,7 +29,7 @@ function setupResNet()
 
     local resnet = getResNet()
 	--local resnet = getVGG()
-	
+
 	-- this replaces 'nn' modules with 'cudnn' counterparts in-place
     cudnn.convert(resnet, cudnn):cuda()
 
@@ -44,10 +44,10 @@ function setupResNet()
 		        :add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
 
 	-- DO NOT USE THIS IF YOU MUST
-    -- use 'optnet' to reduce memory useage 
+    -- use 'optnet' to reduce memory useage
 	--local sample_input = torch.randn(1,3,32,32):float()
     --optnet.optimizeMemory(net, sample_input, {inplace = false, mode = 'training'})
-    
+
 	if opt.nGPU == 1 then
         -- use single GPU, use the first on in default
 		net:add(resnet)
@@ -168,7 +168,7 @@ function train()
         end
         optim.sgd(feval, parameters, optimState)
     end
-    
+
 	confusion:updateValids()
 
     trainAcc = confusion.totalValid * 100
