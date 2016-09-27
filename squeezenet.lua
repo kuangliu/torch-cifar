@@ -1,3 +1,9 @@
+------------------------------------------------------------------
+-- this is the architecture described in the paper:
+-- https://arxiv.org/pdf/1602.07360v3.pdf
+-- for imagenet training (224x224 input).
+------------------------------------------------------------------
+
 require 'nn';
 
 Conv = nn.SpatialConvolution
@@ -54,7 +60,7 @@ function getSqueezeNet()
 
     net:add(fireModule(512,512,64))
     net:add(Conv(512,1000,1,1,1,1,0,0))
-    net:add(AvgPool(13,13,1,1))
+    net:add(AvgPool(13,13,1,1))  --> comment this line for cifar10 dataset
 
     net:add(nn.View(1000))
     net:add(nn.Linear(1000,10))
